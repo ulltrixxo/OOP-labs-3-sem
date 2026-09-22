@@ -1,0 +1,19 @@
+# Каталоги сборки
+build/
+build-*/
+cmake-build-*/
+
+# Данные: датасет и результаты предобработки в репозиторий не попадают.
+data/
+
+# Артефакты программы
+*.bin
+*.o
+*.a
+
+# Инструменты
+compile_commands.json
+.cache/
+.vscode/
+docs/html/
+docs/latex/
