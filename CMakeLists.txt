@@ -37,6 +37,18 @@ if(OOP_ENABLE_SANITIZERS)
 
     target_link_options(oop_project_options INTERFACE
         $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
+
+    # Санитайзеры сами по себе не видят ошибок внутри контейнеров: память под
+    # vector выделена, и обращение к элементу за пределами size() выглядит для
+    # ASan обычным доступом к своему же буферу. Эти два макроса включают
+    # проверки в самой libstdc++:
+    #   _GLIBCXX_ASSERTIONS      — проверка предусловий, например __n < size()
+    #                              в vector::operator[]; даёт понятное сообщение;
+    #   _GLIBCXX_SANITIZE_VECTOR — разметка неиспользованной ёмкости вектора,
+    #                              после чего ASan ловит container-overflow.
+    target_compile_definitions(oop_project_options INTERFACE
+        $<$<CONFIG:Debug>:_GLIBCXX_ASSERTIONS>
+        $<$<CONFIG:Debug>:_GLIBCXX_SANITIZE_VECTOR>)
 endif()
 
 enable_testing()
