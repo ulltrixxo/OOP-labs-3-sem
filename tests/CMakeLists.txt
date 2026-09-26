@@ -18,3 +18,4 @@ function(oop_add_test name)
 endfunction()
 
 oop_add_test(test_smoke)
+oop_add_test(test_calculate)
