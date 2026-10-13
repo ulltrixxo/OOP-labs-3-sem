@@ -11,8 +11,9 @@ namespace fs = std::filesystem;
 
 struct Config {
     char delimiter;
-    std::vector<std::string> missing_marker;
-    std::vector<std::string> missing_columns;
+    std::vector<std::string> missing_value;
+    std::vector<std::string> unnecessary_columns;
+    std::string impute_missing_value;
 };
 struct NumericColumn {
     std::vector<std::optional<double>> values;
@@ -108,8 +109,10 @@ class Dataset {
         std::vector<std::string> columns_list;
         std::unordered_map<std::string, int> missing_values;
         std::unordered_map<std::string, Column> columns_;
+        std::vector<int> skipped_columns; 
+        Config config_;
     public:
-        Dataset(fs::path path);
+        Dataset(fs::path path, const Config& config);
         void init_category(const std::string& category, const std::vector<std::string>& raw_data);
         void add_row(std::vector<std::string>& values);
         DatasetInfo analyze() const;
@@ -119,7 +122,8 @@ class Dataset {
         int get_rows() const;
         int show_stat(const DatasetInfo& info, std::size_t n) const;
         bool in_missing_values(const std::string& value) const;
-        bool in_missing_columns(const std::string& value) const;
+        bool unnecessary_column(const std::string& value) const;
+        bool skipped_column(int index) const; 
         void impute(DatasetInfo& info);
         void scale_numeric_features(DatasetInfo& info);
         void OneHot(DatasetInfo& info);

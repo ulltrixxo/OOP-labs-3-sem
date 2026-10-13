@@ -10,8 +10,14 @@
 #include <format>
 
 int main() {
-
-    Dataset dataset("data/cirrhosis.csv");
+    Config dataset_config = {
+        .delimiter = ',',
+        .missing_value = {"NA", "\"NA\""},
+        .unnecessary_columns = {"ID"},
+        .impute_missing_value = "__MISSING__"
+    };
+    try {
+    Dataset dataset("data/cirrhosis.csv", dataset_config);
 
     DatasetInfo info = dataset.analyze();
 
@@ -55,5 +61,12 @@ int main() {
     
     std::cout << std::format("CSV: {:>8} байт\n", csv_size);
     std::cout << std::format("Binary: {:>8} байт\n", bin_size);
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << '\n';
+        return 1;
+    }
+
+
     return 0;
 }

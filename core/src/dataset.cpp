@@ -9,9 +9,9 @@
 #include <variant>
 #include <cmath>
 #include <unordered_set>
+#include <ranges>
+#include <stdexcept>
 
-
-static Config config;
 std::optional<double> parse_double(std::string_view s) {
     double value = 0;
     auto result = std::from_chars(s.data(), s.data() + s.size(), value);
@@ -20,56 +20,89 @@ std::optional<double> parse_double(std::string_view s) {
 }
 
 bool Dataset::in_missing_values(const std::string& value) const {
-    for (std::string missing_value : config.missing_marker) {
+    for (const std::string& missing_value : config_.missing_value) {
         if (value == missing_value) return true;
     }
     return false;
 }
-bool Dataset::in_missing_columns(const std::string& value) const {
-    for (std::string missing_value : config.missing_columns) {
+bool Dataset::unnecessary_column(const std::string& value) const {
+    for (const std::string& missing_value : config_.unnecessary_columns) {
         if (value == missing_value) return true;
     }
     return false;
 }
-Dataset::Dataset(fs::path path) {
+
+bool Dataset::skipped_column(int index) const {
+    for (int i : skipped_columns) {
+        if (index == i) return true;
+    }
+    return false;
+}
+Dataset::Dataset(fs::path path, const Config& config) : config_(config) {
     std::vector<std::vector<std::string>> raw_data;
     std::ifstream file(path);
 
-    config.delimiter = ',';
-    config.missing_marker.push_back("NA");
-    config.missing_marker.push_back("\"NA\"");
-    config.missing_columns.push_back("ID");
-
     if (!file) {
-        return;
+        throw std::runtime_error("Error opening file: " + path.string());
     }
 
     std::string data, header, value; 
     std::vector<std::string> values;
 
     // считывание первой строки датасета --- названия признаков.
-    if(std::getline(file, data)) {
-        std::istringstream stream_data(data); // превращение data в поток, нужный для getline()
-        while (std::getline(stream_data, value, ',')) {    
-            if (in_missing_columns(value)) continue; // Пропуск ID
-            columns_list.push_back(value);
-            missing_values[value] = 0;
-        }
+    int column_index = 0;
+    if(!std::getline(file, data)) {
+        throw std::runtime_error("file is empty or this is directory");
+    }
+    std::istringstream stream_data(data); // превращение data в поток, нужный для getline()
+    while (std::getline(stream_data, value, config_.delimiter)) {    
+        if (unnecessary_column(value)) {
+            skipped_columns.push_back(column_index);
+            ++column_index;
+            continue;
+        };// Пропуск ID
+        columns_list.push_back(value);
+        missing_values[value] = 0;
+        ++column_index;
+    }
+    if (columns_list.empty()) {
+        throw std::runtime_error("headers are empty");
     }
     data.clear();
     raw_data.resize(columns_list.size());
 
     // заполнение сырыми данными
-    while(std::getline(file, data)) {
-        std::istringstream stream_data(data);
-        for (auto i = 0UL; i < columns_list.size(); ++i) {
-            std::getline(stream_data, value, config.delimiter);
-            if (i == 0) std::getline(stream_data, value, config.delimiter); // пропуск ID
-            raw_data[i].push_back(value);
+    // В каждой строке полей столько же, скольк5о в заголовке, включая пропускаемые.
+    const std::size_t expected_fields = columns_list.size() + skipped_columns.size();
+    std::size_t line_number = 1; // строка 1 — заголовок, нумерация как в редакторе
+
+    while (std::getline(file, data)) {
+        ++line_number;
+
+        // Полей на одно больше, чем разделителей. Проверка до разбора строки:
+        // ловит и недостающие, и лишние поля.
+        const auto fields = static_cast<std::size_t>(std::ranges::count(data, config_.delimiter)) + 1;
+        if (fields != expected_fields) {
+            throw std::runtime_error(std::format(
+                "{}: line {}: expected {} values, got {}",
+                path.string(), line_number, expected_fields, fields));
         }
 
+        std::size_t file_column = 0;
+        std::size_t dataset_column = 0;
+
+        for (const auto field : data | std::views::split(config_.delimiter)) {
+            if (!skipped_column(file_column)) {
+                raw_data[dataset_column].emplace_back(field.begin(), field.end());
+                ++dataset_column;
+            }
+            ++file_column;
+        }
     }
     rows = raw_data[0].size();
+    if (rows == 0) {
+        throw std::runtime_error("the headers exist, but there is no data.");
+    }
 
     // инициализация категорий датасета на основе сырых данных
     for (std::size_t i = 0; i < columns_list.size(); ++i) {
@@ -204,8 +237,8 @@ NumericFeatureInfo calculate_num_arr(std::span<double> array) {
         result.ranges[i].second = max_st;
 
         while (n < array.size() && min_st <= array[n] && (i != 9 ? array[n] < max_st : array[n] <= max_st)) {
-                ++result.values[i];
-                ++n;
+            ++result.values[i];
+            ++n;
         }
         min_st = max_st;
     }
@@ -324,7 +357,7 @@ void Dataset::impute(DatasetInfo& info) {
                 auto& cat_arr = std::get<CategoricalColumn>(columns_[column]).values;
                 for (std::optional<std::string>& x : cat_arr) {
                     if (!x.has_value()) {
-                        x = "__MISSING__";
+                        x = config_.impute_missing_value;
                     }
                 }
             }
@@ -362,9 +395,9 @@ void Dataset::OneHot(DatasetInfo& info) {
             std::sort(onehot_headers.begin(), onehot_headers.end());
             std::sort(onehot_values.begin(), onehot_values.end());
             if (cat_stat.missing_count > 0){
-                onehot_headers.push_back(column + "=__MISSING__");
-                onehot_values.push_back("__MISSING__");
-                columns_[column + "=__MISSING__"].emplace<NumericColumn>().values.resize(rows);
+                onehot_headers.push_back(column + "=" + config_.impute_missing_value);
+                onehot_values.push_back(config_.impute_missing_value);
+                columns_[column + "=" + config_.impute_missing_value].emplace<NumericColumn>().values.resize(rows);
             } 
             for (std::size_t row = 0; row < rows; ++row) {
                 for (size_t i = 0; i < onehot_headers.size(); ++i) {
