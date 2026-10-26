@@ -28,7 +28,7 @@ else()
     message(STATUS "oop_core: в core/src нет .cpp, цель собрана как header-only")
 endif()
 
-# Каталог заголовков виден как #include <oop/....hpp>.
+# Каталог заголовков виден как #include "mlcore/....hpp".
 target_include_directories(oop_core ${OOP_CORE_SCOPE}
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
 

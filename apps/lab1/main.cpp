@@ -1,5 +1,7 @@
 // Лабораторная работа 1. Загрузка, анализ и предобработка табличных данных.
-#include "oop/dataset.hpp"
+#include "mlcore/dataset.hpp"
+#include "mlcore/matrix.hpp"
+#include "visualize.hpp"
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -12,16 +14,17 @@
 int main() {
     Config dataset_config = {
         .delimiter = ',',
-        .missing_value = {"NA", "\"NA\""},
+        .missing_values = {"NA", "\"NA\""},
         .unnecessary_columns = {"ID"},
-        .impute_missing_value = "__MISSING__"
+        .impute_missing_value = "__MISSING__",
+        .targets = {"Status"}
     };
     try {
     Dataset dataset("data/cirrhosis.csv", dataset_config);
 
     DatasetInfo info = dataset.analyze();
 
-    dataset.show_info();
+    show_info(info);
 
     int n;
     char save_status = 0;
@@ -35,7 +38,7 @@ int main() {
             std::cout << "Введено некорректное значение, попробуйте ещё раз: " << std::endl;
             continue;
         }
-        if (dataset.show_stat(info, n)) {
+        if (show_stat(info, n)) {
             std::cout << "Число вне диапазона. Попробуйте ещё раз: " << std::endl;
         }
     };
@@ -52,8 +55,8 @@ int main() {
     dataset.impute(info);
     dataset.scale_numeric_features(info);
     dataset.OneHot(info);
-    DatasetMatrix matrix = dataset.encode();
-    save(matrix);
+    ModelMatrix matrix = dataset.encode();
+    save(matrix.get_data(), "data/cirrhosis.bin");
     DatasetMatrix loaded_matrix = DatasetMatrix::load("data/cirrhosis.bin");
 
     const auto csv_size = std::filesystem::file_size("data/cirrhosis.csv"); 
@@ -66,7 +69,6 @@ int main() {
         std::cerr << "Error: " << e.what() << '\n';
         return 1;
     }
-
 
     return 0;
 }

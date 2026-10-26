@@ -26,6 +26,13 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+Тесты собираются вместе с проектом. Чтобы собрать без них, есть два способа:
+
+```bash
+cmake --build build --target lab1                       # только приложение и ядро
+cmake -S . -B build-notests -DOOP_BUILD_TESTS=OFF        # отдельная сборка без тестов
+```
+
 Конфигурация `Debug` (она же по умолчанию) собирается с AddressSanitizer и
 UndefinedBehaviorSanitizer. Отключаются они флагом
 `-DOOP_ENABLE_SANITIZERS=OFF`. Для замеров производительности нужна сборка
@@ -35,7 +42,7 @@ UndefinedBehaviorSanitizer. Отключаются они флагом
 
 ```text
 core/          библиотека ядра: данные, статистика, преобразования, модели
-  include/oop/ публичные заголовки, подключаются как <oop/....hpp>
+  include/mlcore/ публичные заголовки, подключаются как "mlcore/....hpp"
   src/         реализация
 apps/          консольные приложения, по подкаталогу на работу
   lab1/

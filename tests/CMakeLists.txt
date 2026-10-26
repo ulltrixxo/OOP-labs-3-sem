@@ -17,5 +17,22 @@ function(oop_add_test name)
         ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
 endfunction()
 
-oop_add_test(test_smoke)
+# Обязательные проверки условия работы 1 и где они лежат:
+#   разбор строки с пропуском         — test_loader
+#   определение типа признака         — test_loader
+#   расчёт квантилей на известном массиве — test_calculate
+#   корректность кодирования категорий — test_encoding
+#   цикл «запись — чтение» бинарного файла — test_binary
+#   реакция на несогласованный CSV    — test_loader
+oop_add_test(test_loader)
 oop_add_test(test_calculate)
+oop_add_test(test_encoding)
+oop_add_test(test_binary)
+
+# Работа 2
+oop_add_test(test_split)
+
+# Отдельные программы для проверок, которые при ошибке в ядре аварийно
+# останавливают процесс: так они не обрывают остальные тесты.
+oop_add_test(test_calculate_small)
+oop_add_test(test_binary_errors)

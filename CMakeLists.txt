@@ -19,6 +19,10 @@ endif()
 
 option(OOP_ENABLE_SANITIZERS "AddressSanitizer и UndefinedBehaviorSanitizer в Debug" ON)
 
+# Тесты можно отключить: -DOOP_BUILD_TESTS=OFF. Удобно, когда идёт переделка
+# интерфейса ядра и тесты ещё не обновлены, а приложение нужно собрать уже сейчас.
+option(OOP_BUILD_TESTS "Собирать тесты и регистрировать их в CTest" ON)
+
 # Общие настройки компиляции собраны в одну интерфейсную цель: она ничего не
 # компилирует сама, а раздаёт флаги всем, кто к ней подключился. Так флаги
 # описаны один раз, а не продублированы в каждой цели.
@@ -51,8 +55,10 @@ if(OOP_ENABLE_SANITIZERS)
         $<$<CONFIG:Debug>:_GLIBCXX_SANITIZE_VECTOR>)
 endif()
 
-enable_testing()
-
 add_subdirectory(core)
 add_subdirectory(apps)
-add_subdirectory(tests)
+
+if(OOP_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

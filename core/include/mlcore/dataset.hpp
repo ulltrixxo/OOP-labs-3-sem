@@ -1,5 +1,5 @@
 #pragma once
-#include <iostream>
+#include "mlcore/matrix.hpp"
 #include <vector>
 #include <optional>
 #include <variant>
@@ -11,10 +11,17 @@ namespace fs = std::filesystem;
 
 struct Config {
     char delimiter;
-    std::vector<std::string> missing_value;
+    std::vector<std::string> missing_values;
     std::vector<std::string> unnecessary_columns;
     std::string impute_missing_value;
+    std::vector<std::string> targets;
+    bool in_missing_values(const std::string& value) const;
+    bool unnecessary_column(const std::string& value) const;
+    bool in_targets(const std::string& value) const;
 };
+
+
+
 struct NumericColumn {
     std::vector<std::optional<double>> values;
 };
@@ -49,7 +56,7 @@ struct CategoricalFeatureInfo
 {
     int missing_count;
 
-    std::unordered_map<
+    std::map<
         std::string,
         std::size_t
     > frequencies;
@@ -60,78 +67,46 @@ using FeatureInfo =
         NumericFeatureInfo,
         CategoricalFeatureInfo
     >;
-using DatasetInfo =
-    std::unordered_map<std::string, FeatureInfo>;
-
-enum class Layout
-{
-    RowMajor,
-    ColumnMajor
+struct DatasetInfo {
+    std::size_t rows;
+    std::vector<std::string> columns;
+    std::unordered_map<std::string, FeatureInfo> features;
 };
 
-class DatasetMatrix
-{
-private:
-    std::vector<std::string> feature_names;
-    std::vector<double> data_;
-
-    std::size_t rows_;
-    std::size_t cols_;
-
-    Layout layout_;
-
-public:
-    DatasetMatrix(std::size_t rows = 0, std::size_t cols = 0, Layout layout = Layout::RowMajor, 
-        const std::vector<std::string>& feature_names = {});
-    double& operator()(
-        std::size_t row,
-        std::size_t column
-    );
-
-    const double& operator()(
-        std::size_t row,
-        std::size_t column
-    ) const;
-
-    std::size_t get_rows() const;
-    std::size_t get_cols() const;
-    Layout get_layout() const;
-    std::string_view get_feature_name(std::size_t i);
-    const double* get_data() const;
-    static DatasetMatrix load(
-        const std::filesystem::path& path
-    );
-};
 class Dataset {
     private:
-        int rows = 0;
+        std::size_t rows = 0, cols = 0;
         //std::string column_types;
         std::vector<std::string> columns_list;
         std::unordered_map<std::string, int> missing_values;
         std::unordered_map<std::string, Column> columns_;
         std::vector<int> skipped_columns; 
         Config config_;
-    public:
-        Dataset(fs::path path, const Config& config);
+
+        // приватные методы
         void init_category(const std::string& category, const std::vector<std::string>& raw_data);
         void add_row(std::vector<std::string>& values);
-        DatasetInfo analyze() const;
+        bool skipped_column(int index) const; 
         FeatureInfo calculate(const std::string& category) const;
-        void show_info() const;
+
+        NumericFeatureInfo calculate_num_arr(std::span<double> array) const;
+        CategoricalFeatureInfo calculate_categorical_arr(const std::string& category) const;
+        bool has_all_targets(std::size_t row) const;
+    public:
+        Dataset(fs::path path, const Config& config);
+        DatasetInfo analyze() const;
+
         int get_size() const;
         int get_rows() const;
-        int show_stat(const DatasetInfo& info, std::size_t n) const;
-        bool in_missing_values(const std::string& value) const;
-        bool unnecessary_column(const std::string& value) const;
-        bool skipped_column(int index) const; 
+        std::vector<std::string> get_columns_list() const;
+
         void impute(DatasetInfo& info);
         void scale_numeric_features(DatasetInfo& info);
         void OneHot(DatasetInfo& info);
-        DatasetMatrix encode(Layout encoding_type = Layout::RowMajor);
+        ModelMatrix encode(Layout encoding_type = Layout::RowMajor);
 };
 
-NumericFeatureInfo calculate_num_arr(std::span<double> array);
-void save(DatasetMatrix& data);
+void save(const DatasetMatrix& data, fs::path path);
 
 // todo: подразбить на файлы, проверить, что Dataset правильно выполняет инкапсуляцию
 // убрать волшебные литералы, завести константы для них
