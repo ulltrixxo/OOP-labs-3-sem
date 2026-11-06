@@ -52,8 +52,8 @@ DatasetMatrix make_matrix(std::size_t rows, std::size_t cols)
 // без арифметики, поэтому любое отличие — ошибка формата.
 void check_round_trip(DatasetMatrix& original)
 {
-    save(original, saved_file);
-    DatasetMatrix loaded = DatasetMatrix::load(saved_file);
+    save(ModelMatrix(original, {}), saved_file);
+    DatasetMatrix loaded = ModelMatrix::load(saved_file).get_data();
 
     CHECK(loaded.get_rows() == original.get_rows());
     CHECK(loaded.get_cols() == original.get_cols());
@@ -97,9 +97,9 @@ void test_rectangular()
 void test_file_size()
 {
     DatasetMatrix matrix = make_matrix(3, 4);
-    save(matrix, saved_file);
+    save(ModelMatrix(matrix, {}), saved_file);
 
-    std::size_t expected = sizeof(std::size_t) * 2 + sizeof(Layout);
+    std::size_t expected = sizeof(std::size_t) * 3 + sizeof(Layout);
     for (std::size_t c = 0; c < matrix.get_cols(); ++c)
     {
         expected += sizeof(std::size_t) + matrix.get_feature_name(c).size();

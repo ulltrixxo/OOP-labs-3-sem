@@ -7,6 +7,7 @@
 
 #include "fixtures.hpp"
 #include "testing.hpp"
+#include "mlcore/exceptions.hpp"
 
 #include "mlcore/dataset.hpp"
 #include "mlcore/matrix.hpp"
@@ -28,9 +29,8 @@ const std::map<std::string, int> kCodes = {{"a", 0}, {"b", 1}, {"c", 2}};
 ModelMatrix make_data(std::size_t rows)
 {
     DatasetMatrix matrix(rows, 2, Layout::RowMajor, {"id", "id_plus_100"});
-    NumericTarget numeric;
-    CategorialTarget categorical;
-    categorical.categorical_values = kCodes;
+    Target numeric{.type = TargetType::Numeric, .values = {}, .categorical_values = {}};
+    Target categorical{.type = TargetType::Categorical, .values = {}, .categorical_values = kCodes};
 
     for (std::size_t r = 0; r < rows; ++r)
     {
@@ -95,26 +95,32 @@ void test_partition()
 // --- Признаки и ответы остаются вместе --------------------------------------------
 
 // Строка части и её ответы относятся к одной исходной строке — для обоих
-// типов отклика. Таблица кодов категориального отклика есть в обеих частях.
+// типов отклика. Тип отклика и таблица кодов сохраняются в обеих частях.
 void check_aligned(const ModelMatrix& part)
 {
     const DatasetMatrix& data = part.get_data();
-    const auto* numeric = std::get_if<NumericTarget>(&part.get_targets().at("num"));
-    const auto* categorical = std::get_if<CategorialTarget>(&part.get_targets().at("cat"));
-    CHECK(numeric != nullptr && categorical != nullptr);
-    if (!numeric || !categorical) return;
+    const Target& numeric = part.get_targets().at("num");
+    const Target& categorical = part.get_targets().at("cat");
 
-    CHECK(numeric->values.size() == data.get_rows());
-    CHECK(categorical->values.size() == data.get_rows());
-    CHECK(categorical->categorical_values == kCodes);
-    if (numeric->values.size() != data.get_rows() || categorical->values.size() != data.get_rows()) return;
+    CHECK(numeric.type == TargetType::Numeric);
+    CHECK(categorical.type == TargetType::Categorical);
+    CHECK(numeric.categorical_values.empty());
+    CHECK(categorical.categorical_values == kCodes);
+
+    CHECK(numeric.values.size() == data.get_rows());
+    CHECK(categorical.values.size() == data.get_rows());
+    if (numeric.values.size() != data.get_rows() || categorical.values.size() != data.get_rows()) return;
+
+    // target_values отдаёт те же ответы, что лежат в Target.
+    CHECK(part.target_values("num").size() == data.get_rows());
+    CHECK(part.target_values("num").data() == numeric.values.data());
 
     for (std::size_t r = 0; r < data.get_rows(); ++r)
     {
         const double id = data(r, 0);
         CHECK(data(r, 1) == id + 100);
-        CHECK(numeric->values[r] == id * 10);
-        CHECK(categorical->values[r] == static_cast<double>(static_cast<int>(id) % 3));
+        CHECK(numeric.values[r] == id * 10);
+        CHECK(categorical.values[r] == static_cast<double>(static_cast<int>(id) % 3));
     }
 }
 
@@ -156,14 +162,22 @@ void test_errors()
     const ModelMatrix source = make_data(10);
 
     // Доля вне отрезка [0; 1].
-    CHECK_THROWS_AS(source.split(-0.1, 42), std::runtime_error);
-    CHECK_THROWS_AS(source.split(1.5, 42), std::runtime_error);
+    CHECK_THROWS_AS(source.split(-0.1, 42), BadArgument);
+    CHECK_THROWS_AS(source.split(1.5, 42), BadArgument);
 
     // Инвариант ModelMatrix: ответов столько же, сколько строк матрицы.
     DatasetMatrix matrix(3, 1, Layout::RowMajor, {"x"});
     Targets targets;
-    targets["num"] = NumericTarget{{1.0, 2.0}};   // 2 ответа на 3 строки
-    CHECK_THROWS_AS(ModelMatrix(matrix, targets), std::runtime_error);
+    targets["num"] = Target{.type = TargetType::Numeric, .values = {1.0, 2.0}, .categorical_values = {}};   // 2 ответа на 3 строки
+    CHECK_THROWS_AS(ModelMatrix(matrix, targets), SizeError);
+
+    // Инвариант ModelMatrix: у числового отклика нет таблицы кодов.
+    Targets mixed;
+    mixed["num"] = Target{.type = TargetType::Numeric, .values = {1.0, 2.0, 3.0}, .categorical_values = {{"a", 0}}};
+    CHECK_THROWS_AS(ModelMatrix(matrix, mixed), SizeError);
+
+    // Отклика с таким именем нет.
+    CHECK_THROWS_AS(source.target_values("no_such_target"), std::out_of_range);
 }
 
 // --- Разбиение настоящей предобработки ---------------------------------------------
@@ -192,7 +206,7 @@ void test_pipeline()
     const Split split = encoded.split(0.7, 42);
     const auto rows_of = [](const ModelMatrix& part) { return part.get_data().get_rows(); };
     const auto targets_of = [](const ModelMatrix& part) {
-        return std::get<CategorialTarget>(part.get_targets().at("status")).values.size();
+        return part.target_values("status").size();
     };
 
     CHECK(rows_of(split.train) + rows_of(split.test) == 30);

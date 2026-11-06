@@ -36,3 +36,6 @@ oop_add_test(test_split)
 # останавливают процесс: так они не обрывают остальные тесты.
 oop_add_test(test_calculate_small)
 oop_add_test(test_binary_errors)
+
+oop_add_test(test_knn)
+oop_add_test(test_targets_binary)

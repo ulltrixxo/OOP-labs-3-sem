@@ -232,10 +232,10 @@ void test_targets()
     // Тип отклика: label категориальный, score числовой.
     CHECK(targets.contains("label") && targets.contains("score"));
     if (!targets.contains("label") || !targets.contains("score")) return;
-    const auto* label = std::get_if<CategorialTarget>(&targets.at("label"));
-    const auto* score = std::get_if<NumericTarget>(&targets.at("score"));
-    CHECK(label != nullptr && score != nullptr);
-    if (!label || !score) return;
+    const Target* label = &targets.at("label");
+    const Target* score = &targets.at("score");
+    CHECK(label->type == TargetType::Categorical);
+    CHECK(score->type == TargetType::Numeric);
 
     // Строки без ответа исключены; все векторы откликов одной длины с матрицей.
     CHECK(data.get_rows() == kept.size());

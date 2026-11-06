@@ -17,7 +17,7 @@ int main() {
         .missing_values = {"NA", "\"NA\""},
         .unnecessary_columns = {"ID"},
         .impute_missing_value = "__MISSING__",
-        .targets = {"Status"}
+        .targets = {"Status", "N_Days"}
     };
     try {
     Dataset dataset("data/cirrhosis.csv", dataset_config);
@@ -56,19 +56,18 @@ int main() {
     dataset.scale_numeric_features(info);
     dataset.OneHot(info);
     ModelMatrix matrix = dataset.encode();
-    save(matrix.get_data(), "data/cirrhosis.bin");
-    DatasetMatrix loaded_matrix = DatasetMatrix::load("data/cirrhosis.bin");
+    save(matrix, "data/cirrhosis.bin");
 
     const auto csv_size = std::filesystem::file_size("data/cirrhosis.csv"); 
     const auto bin_size = std::filesystem::file_size("data/cirrhosis.bin");
     
     std::cout << std::format("CSV: {:>8} байт\n", csv_size);
     std::cout << std::format("Binary: {:>8} байт\n", bin_size);
+
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << '\n';
         return 1;
     }
-
     return 0;
 }

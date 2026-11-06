@@ -62,3 +62,13 @@ if(OOP_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+find_package(Doxygen QUIET)
+if(DOXYGEN_FOUND)
+    configure_file(Doxyfile.in Doxyfile @ONLY)
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Generating Doxygen HTML documentation"
+        VERBATIM)
+endif()

@@ -12,6 +12,8 @@
 #include <string>
 #include <string_view>
 
+namespace fs = std::filesystem;
+
 namespace fixtures
 {
 

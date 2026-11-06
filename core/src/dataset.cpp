@@ -1,4 +1,5 @@
 #include "mlcore/dataset.hpp"
+#include "mlcore/exceptions.hpp"
 #include <fstream>
 #include <format>
 #include <string>
@@ -12,6 +13,8 @@
 #include <ranges>
 #include <stdexcept>
 #include <random>
+namespace fs = std::filesystem;
+
 namespace{
 std::optional<double> parse_double(std::string_view s) {
     double value = 0;
@@ -27,7 +30,8 @@ Dataset::Dataset(fs::path path, const Config& config) : config_(config) {
     std::ifstream file(path);
 
     if (!file) {
-        throw std::runtime_error("Error opening file: " + path.string());
+        throw FileOpenError(diagnostics::message(
+            std::format("Cannot open CSV file '{}' for reading", path.string())));
     }
 
     std::string data, header, value; 
@@ -36,8 +40,10 @@ Dataset::Dataset(fs::path path, const Config& config) : config_(config) {
     // считывание первой строки датасета --- названия признаков.
     int column_index = 0;
     if(!std::getline(file, data)) {
-        throw std::runtime_error("file is empty or this is directory");
+        throw FileFormatError(diagnostics::message(
+            std::format("Cannot read the header of CSV file '{}': the file is empty or cannot be read", path.string())));
     }
+
     std::istringstream stream_data(data); // превращение data в поток, нужный для getline()
     while (std::getline(stream_data, value, config_.delimiter)) {    
         if (config_.unnecessary_column(value)) {
@@ -50,7 +56,8 @@ Dataset::Dataset(fs::path path, const Config& config) : config_(config) {
         ++column_index;
     }
     if (columns_list.empty()) {
-        throw std::runtime_error("headers are empty");
+        throw FileFormatError(diagnostics::message(
+            std::format("CSV file '{}': the header contains no columns to load", path.string())));
     }
     data.clear();
     raw_data.resize(columns_list.size());
@@ -67,9 +74,9 @@ Dataset::Dataset(fs::path path, const Config& config) : config_(config) {
         // ловит и недостающие, и лишние поля.
         const auto fields = static_cast<std::size_t>(std::ranges::count(data, config_.delimiter)) + 1;
         if (fields != expected_fields) {
-            throw std::runtime_error(std::format(
-                "{}: line {}: expected {} values, got {}",
-                path.string(), line_number, expected_fields, fields));
+            throw FileFormatError(diagnostics::message(std::format(
+                "{}: line {}: incorrect field count; expected {}, got {}",
+                path.string(), line_number, expected_fields, fields)));
         }
 
         std::size_t file_column = 0;
@@ -86,7 +93,8 @@ Dataset::Dataset(fs::path path, const Config& config) : config_(config) {
     rows = raw_data[0].size();
     cols = columns_list.size();
     if (rows == 0) {
-        throw std::runtime_error("the headers exist, but there is no data.");
+        throw FileFormatError(diagnostics::message(
+            std::format("CSV file '{}' contains a header but no data rows", path.string())));
     }
 
     // инициализация категорий датасета на основе сырых данных
@@ -119,41 +127,16 @@ Dataset::Dataset(fs::path path, const Config& config) : config_(config) {
     }
 }
 
-bool Config::in_missing_values(const std::string& value) const {
-    for (const std::string& missing_value : missing_values) {
-        if (value == missing_value) return true;
-    }
-    return false;
-}
-
-bool Config::unnecessary_column(const std::string& value) const {
-    for (const std::string& missing_value : unnecessary_columns) {
-        if (value == missing_value) return true;
-    }
-    return false;
-}
-
-bool Config::in_targets(const std::string& value) const {
-    for (const std::string& target : targets) {
-        if (value == target) return true;
-    }
-    return false;
-}
 bool Dataset::skipped_column(int index) const {
     for (int i : skipped_columns) {
         if (index == i) return true;
     }
     return false;
 }
-// количество столбцов
-int Dataset::get_size() const {
-    return columns_.size();
-}
 
-// количество строк
-int Dataset::get_rows() const {
-    return rows;
-}
+int Dataset::get_cols() const { return columns_.size(); }
+int Dataset::get_rows() const { return rows; }
+std::vector<std::string> Dataset::get_columns_list() const { return columns_list; }
 
 void Dataset::init_category(const std::string& category, const std::vector<std::string>& raw_data) {
 // инициализация категории на основе сырых данных
@@ -163,18 +146,19 @@ void Dataset::init_category(const std::string& category, const std::vector<std::
     double num = 0;
     std::unordered_set<std::string> unique_values;
     for (std::size_t i = 0; i < raw_data.size(); ++i) {
-        if (!config_.in_missing_values(raw_data[i])) {
-            auto result = std::from_chars(raw_data[i].data(), raw_data[i].data() + raw_data[i].size(), num);
-            if (result.ec != std::errc{}) {
+        const std::string& str = raw_data[i];
+        if (!config_.in_missing_values(str)) {
+            auto result = std::from_chars(str.data(), str.data() + str.size(), num);
+            if (result.ec != std::errc{} || result.ptr != str.data() + str.size()) {
                 columns_[category].emplace<CategoricalColumn>();
                 return;
             }
             unique_values.insert(std::to_string(num));
-            if (unique_values.size() > 10) {
-                columns_[category].emplace<NumericColumn>();
-            return;
-            }
         }
+    }
+    if (unique_values.size() > NUMERIC_UNIQUE_VALUES_LIMIT) {
+            columns_[category].emplace<NumericColumn>();
+        return;
     }
     columns_[category].emplace<CategoricalColumn>();
     return;
@@ -183,7 +167,7 @@ void Dataset::init_category(const std::string& category, const std::vector<std::
 // добавить строку в датасет
 void Dataset::add_row(std::vector<std::string>& values) {
     double num = 0.0;
-    for (std::size_t i = 0UL; i < columns_list.size(); ++i) {
+    for (std::size_t i = 0; i < columns_list.size(); ++i) {
         if (std::holds_alternative<NumericColumn>(columns_[columns_list[i]])){
             auto& numeric_list = std::get<NumericColumn>(columns_[columns_list[i]]);
             if (config_.in_missing_values(values[i])) {
@@ -212,7 +196,7 @@ DatasetInfo Dataset::analyze() const {
     DatasetInfo info;
     info.columns = columns_list;
     info.rows = rows;
-    for (std::size_t i = 0UL; i < columns_list.size(); ++i) {
+    for (std::size_t i = 0; i < columns_list.size(); ++i) {
         info.features[columns_list[i]] = calculate(columns_list[i]);
     }
     return info;
@@ -242,7 +226,7 @@ NumericFeatureInfo Dataset::calculate_num_arr(std::span<double> array) const {
         squared_sum += (array[i] - result.mean) * (array[i] - result.mean);
     }
     result.variance = squared_sum / (array.size() - 1);
-    double step = (result.max - result.min) / 10.;
+    double step = (result.max - result.min) / static_cast<double>(HISTOGRAM_COUNT);
     min_st = result.min;
     for (int i = 0; i < 10; ++i) {
         max_st = result.min + step * (i + 1);
@@ -269,6 +253,7 @@ CategoricalFeatureInfo Dataset::calculate_categorical_arr(const std::string& cat
 
     return result;
 }
+
 // высчитывание данных о каждом столбце датасета
 FeatureInfo Dataset::calculate(const std::string& category) const {
     FeatureInfo statistic;
@@ -379,26 +364,6 @@ void Dataset::OneHot(DatasetInfo& info) {
     }
     columns_list = new_column_list;
 }
-// todo: рассказать, в чем заключается полиморфизм, обеспечиваемый шаблонами. Сравнить виртуальные функции и шаблоны с точки зрения обеспечения полиморфного поведения
-// раскрутка стека
-void save(const DatasetMatrix& data, fs::path path) {
-    std::ofstream file(path, std::ios::binary);
-    std::size_t cols = data.get_cols(), rows = data.get_rows();
-    Layout layout = data.get_layout();
-    const double* DatasetMatrix_data = data.get_data();
-    file.write(reinterpret_cast<const char*>(&cols), sizeof(std::size_t));
-    file.write(reinterpret_cast<const char*>(&rows), sizeof(std::size_t));
-    file.write(reinterpret_cast<const char*>(&layout), sizeof(Layout));
-    for (std::size_t i = 0; i < data.get_cols(); ++i) {
-        std::size_t len = data.get_feature_name(i).size();
-        file.write(reinterpret_cast<const char*>(&len), sizeof(std::size_t));
-        for (char c : data.get_feature_name(i)) {
-            file.write(&c, sizeof(char));
-        }
-    }
-    file.write(reinterpret_cast<const char*>(DatasetMatrix_data), rows * cols * sizeof(double));
-
-}
 
 bool Dataset::has_all_targets(std::size_t row) const {
 
@@ -453,27 +418,27 @@ ModelMatrix Dataset::encode(Layout encoding_type) {
                 skipped_rows = 0;
                 if (auto* numeric = std::get_if<NumericColumn>(&columns_[target])) {
                     // если числовое, просто добавляем его
-                    std::vector<double>& num_target = targets[target].emplace<NumericTarget>().values; 
-                    num_target.resize(matrix_rows);
+                    targets[target].type = TargetType::Numeric;
+                    targets[target].values.resize(matrix_rows);
 
                     for (std::size_t row = 0; row < rows; ++row) {
                         if (!has_all_targets(row)) { ++skipped_rows; continue; }
-                            num_target[row - skipped_rows] = numeric->values[row].value();
+                            targets[target].values[row - skipped_rows] = numeric->values[row].value();
                     }
-                } else if (auto* categorial = std::get_if<CategoricalColumn>(&columns_[target])) {
+                } else if (auto* categorical = std::get_if<CategoricalColumn>(&columns_[target])) {
                     // если категориальное, то кодируем признаки в числа
-                    CategorialTarget& cat_target = targets[target].emplace<CategorialTarget>();
-                    cat_target.values.resize(matrix_rows);
+                    targets[target].type = TargetType::Categorical;
+                    targets[target].values.resize(matrix_rows);
                     unique_values = calculate_categorical_arr(target); // уникальные значения
                     std::size_t i = 0;
                     for (const std::string& value : unique_values.frequencies | std::views::keys) {
-                        cat_target.categorical_values[value] = i++; // словарь значений {"STATUS": "D" : 0, "CL" : 1, "C" : 2}
+                        targets[target].categorical_values[value] = i++; // словарь значений {"STATUS": "D" : 0, "CL" : 1, "C" : 2}
                         // Таким образом, каждому категориальному признаку присваивается свой номер
                     }
                     for (std::size_t row = 0; row < rows; ++row) {
                         if (!has_all_targets(row)) { ++skipped_rows; continue; }
                         // в вектор значений откликов кладём уже закодированные строки
-                        cat_target.values[row - skipped_rows] = cat_target.categorical_values[categorial->values[row].value()];
+                        targets[target].values[row - skipped_rows] = targets[target].categorical_values[categorical->values[row].value()];
                     }
                 }
             }
@@ -485,22 +450,5 @@ ModelMatrix Dataset::encode(Layout encoding_type) {
     return ModelMatrix(data, targets);
 }
 
-// kNNBase::kNNBase(DatasetMatrix& data, unsigned random_state=1) : 
-//     train_data(data.get_rows(), data.get_cols()) {
-//     std::vector<unsigned> num_rows(data.get_rows()); // номера строк
-//     std::mt19937 engine(random_state);
-//     for (int i = 1; i <= data.get_rows(); ++i) {
-//         num_rows[i-1] = i;
-//     }
-//     // перемешивание массива номеров строк
-//     std::shuffle(num_rows.begin(), num_rows.end(), engine);
-    
-//     for (int i = 0; i < data.get_rows(); ++i) {
-//         train_data[i] = data[num_rows[i]];
-//     }
 
-// }
-std::vector<std::string> Dataset::get_columns_list() const {
-    return columns_list;
-}
 

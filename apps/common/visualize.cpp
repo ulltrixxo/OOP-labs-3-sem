@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "mlcore/dataset.hpp"
 #include <fstream>
 #include <format>
@@ -33,8 +34,8 @@ int show_stat(const DatasetInfo& info, std::size_t n) {
         std::cout << "q75:" << num_stat.q75 << std::endl;
         std::cout << "q95:" << num_stat.q95 << "\n" << std::endl;
 
-        for (int i = 0; i < 10; ++i) {
-            std::cout << std::format("[{:<.1f}, {:<.1f}) {:<20} {:<5}\n", num_stat.ranges[i].first, num_stat.ranges[i].second, std::string(num_stat.values[i] / 10, '#'), num_stat.values[i]);
+        for (int i = 0; i < HISTOGRAM_COUNT; ++i) {
+            std::cout << std::format("[{:<.1f}, {:<.1f}) {:<20} {:<5}\n", num_stat.ranges[i].first, num_stat.ranges[i].second, std::string(num_stat.values[i] / OBJECTS_PER_SYMBOL, '#'), num_stat.values[i]);
         }
 
     } else {
@@ -88,4 +89,13 @@ void show_info(const DatasetInfo& info) {
             stat_res
         );
     }
+}
+
+void show_matrix_pair(std::span<const double> one, std::span<const double> two, TargetType type, std::optional<std::size_t> length) {
+    std::size_t count = std::min(one.size(), two.size());
+    if (length) count = std::min(count, *length);
+    std::cout << (type == TargetType::Numeric ? "Regression" : "Classification")
+              << "\nActual\tPredicted\n";
+    for (std::size_t i = 0; i < count; ++i)
+        std::cout << one[i] << '\t' << two[i] << '\n';
 }
