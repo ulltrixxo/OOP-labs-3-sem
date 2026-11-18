@@ -39,3 +39,5 @@ oop_add_test(test_binary_errors)
 
 oop_add_test(test_knn)
 oop_add_test(test_targets_binary)
+
+oop_add_test(test_lab3)

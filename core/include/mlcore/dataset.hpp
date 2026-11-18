@@ -12,7 +12,7 @@
 #include <variant>
 #include <vector>
 constexpr int NUMERIC_UNIQUE_VALUES_LIMIT = 10;
-#define OBJECTS_PER_SYMBOL 10   
+constexpr int OBJECTS_PER_SYMBOL = 10;   
 /** @brief Numeric column; nullopt represents a missing value. */
 struct NumericColumn {
     std::vector<std::optional<double>> values;
@@ -75,10 +75,7 @@ class Dataset {
  * @param info Category frequencies and missing counts from analyze. */
         void OneHot(DatasetInfo& info);
 /** @brief Copy numeric features and extract targets, dropping rows with missing targets.
- * @param encoding_type Use RowMajor; ColumnMajor is not implemented.
+ * @param encoding_type Physical storage order: RowMajor or ColumnMajor.
  * @pre Feature gaps are filled and categories have been one-hot encoded. */
         ModelMatrix encode(Layout encoding_type = Layout::RowMajor);
 };
-
-// todo: подразбить на файлы, проверить, что Dataset правильно выполняет инкапсуляцию
-// убрать волшебные литералы, завести константы для них

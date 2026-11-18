@@ -88,7 +88,7 @@ int main() {
     CHECK_THROWS_AS(fresh.predict(DatasetMatrix(1,2)),SizeError);
     CHECK(fresh.predict(DatasetMatrix(0,1)).empty());
     CHECK_THROWS_AS(fresh.fit(matrix({std::numeric_limits<double>::quiet_NaN()}),std::vector<double>{0}),BadArgument);
-    CHECK(fresh.predict(train)==y); // rejected fit preserves the old model
+    CHECK_THROWS_AS(fresh.predict(train),ModelFitError); // lab3: ошибка fit сбрасывает обученность
     DatasetMatrix bounds(1,1); const auto& cbounds=bounds;
     CHECK_THROWS_AS(bounds.at(1,0),std::out_of_range);
     CHECK_THROWS_AS(cbounds.at(0,1),std::out_of_range);

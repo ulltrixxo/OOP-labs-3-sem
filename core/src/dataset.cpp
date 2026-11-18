@@ -395,9 +395,7 @@ ModelMatrix Dataset::encode(Layout encoding_type) {
     }
 
 
-    switch (encoding_type)
-    {
-    case Layout::RowMajor: {
+    // Общий логический доступ учитывает layout в operator()(row, column).
         std::size_t skipped_rows = 0;
         CategoricalFeatureInfo unique_values{};
 
@@ -442,11 +440,6 @@ ModelMatrix Dataset::encode(Layout encoding_type) {
                     }
                 }
             }
-        break;
-    }
-    default:
-        break;
-    }
     return ModelMatrix(data, targets);
 }
 

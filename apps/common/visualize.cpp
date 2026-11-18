@@ -99,3 +99,31 @@ void show_matrix_pair(std::span<const double> one, std::span<const double> two, 
     for (std::size_t i = 0; i < count; ++i)
         std::cout << one[i] << '\t' << two[i] << '\n';
 }
+
+void print_table(const std::vector<std::string>& headers,
+                 const std::vector<std::vector<std::string>>& rows) {
+    std::vector<std::size_t> widths;
+    for (const auto& header : headers) widths.push_back(header.size());
+    for (const auto& row : rows)
+        for (std::size_t col = 0; col < widths.size(); ++col)
+            widths[col] = std::max(widths[col], row.at(col).size());
+
+    const auto print_row = [&](const std::vector<std::string>& row) {
+        for (std::size_t col = 0; col < widths.size(); ++col) {
+            if (col != 0) std::cout << " | ";
+            std::cout << std::format("{:>{}}", row.at(col), widths[col]);
+        }
+        std::cout << '\n';
+    };
+    print_row(headers);
+    std::vector<std::string> separator;
+    for (auto width : widths) separator.emplace_back(width, '-');
+    print_row(separator);
+    for (const auto& row : rows) print_row(row);
+}
+
+std::string class_name(double code, const Target& target) {
+    for (const auto& [name, value] : target.categorical_values)
+        if (code == value) return name;
+    return std::format("{:g}", code);
+}

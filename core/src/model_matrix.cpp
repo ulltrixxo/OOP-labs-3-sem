@@ -58,9 +58,9 @@ Split ModelMatrix::split(double proportion, unsigned random_state) const {
 
     for (std::size_t i = 0; i < rows; ++i) {
         if (i < train_rows) {
-            std::ranges::copy(this->data[nums[i]], train[i].begin());
+            for (std::size_t j = 0; j < cols; ++j) train(i, j) = this->data(nums[i], j);
         }
-        else std::ranges::copy(this->data[nums[i]], test[i - train_rows].begin());
+        else for (std::size_t j = 0; j < cols; ++j) test(i - train_rows, j) = this->data(nums[i], j);
     }
 
     for (const auto& [target, target_data] : targets) {

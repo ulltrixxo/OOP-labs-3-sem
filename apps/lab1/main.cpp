@@ -2,6 +2,7 @@
 #include "mlcore/dataset.hpp"
 #include "mlcore/matrix.hpp"
 #include "visualize.hpp"
+#include "../common/dataset_config.hpp"
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -12,13 +13,7 @@
 #include <format>
 
 int main() {
-    Config dataset_config = {
-        .delimiter = ',',
-        .missing_values = {"NA", "\"NA\""},
-        .unnecessary_columns = {"ID"},
-        .impute_missing_value = "__MISSING__",
-        .targets = {"Status", "N_Days"}
-    };
+    const Config& dataset_config = app_config::dataset;
     try {
     Dataset dataset("data/cirrhosis.csv", dataset_config);
 
